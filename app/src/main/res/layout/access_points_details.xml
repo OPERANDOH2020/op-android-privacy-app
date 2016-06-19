@@ -13,7 +13,7 @@
         android:id="@+id/tab"
         android:layout_width="@dimen/list_view_item_horizontal_tab"
         android:layout_height="wrap_content"
-        android:visibility="gone"/>
+        android:visibility="gone" />
 
     <!-- Column 2 -->
     <LinearLayout

@@ -31,3 +31,5 @@ local.properties
 *.ipr
 *~
 *.swp
+
+app/src/main/java/eu/operando/operandoapp/filters/domain/PermissionsPerDomainActivity.java

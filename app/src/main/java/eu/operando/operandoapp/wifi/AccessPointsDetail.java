@@ -23,6 +23,7 @@ package eu.operando.operandoapp.wifi;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Color;
 import android.net.wifi.WifiInfo;
 import android.support.annotation.NonNull;
 import android.view.LayoutInflater;
@@ -67,11 +68,12 @@ public class AccessPointsDetail {
         TextView ssidLabel = (TextView) view.findViewById(R.id.ssid);
         ssidLabel.setText(wiFiDetail.getTitle());
         TextView textLinkSpeed = (TextView) view.findViewById(R.id.linkSpeed);
+        textLinkSpeed.setTextColor(Color.BLACK);
         String ipAddress = wiFiDetail.getWiFiAdditional().getIPAddress();
         boolean isConnected = StringUtils.isNotBlank(ipAddress);
         if (!isConnected) {
             textLinkSpeed.setVisibility(View.GONE);
-            ssidLabel.setTextColor(resources.getColor(android.R.color.white));
+            ssidLabel.setTextColor(resources.getColor(android.R.color.black));
         } else {
             ssidLabel.setTextColor(resources.getColor(R.color.connected));
 
@@ -97,13 +99,13 @@ public class AccessPointsDetail {
 
         TextView textLevel = (TextView) view.findViewById(R.id.level);
         textLevel.setText(String.format("%ddBm", wiFiSignal.getLevel()));
-        textLevel.setTextColor(resources.getColor(strength.colorResource()));
+        textLevel.setTextColor(Color.BLACK);
+        //textLevel.setTextColor(resources.getColor(strength.colorResource()));
 
         ((TextView) view.findViewById(R.id.channel)).setText(String.format("%d", wiFiSignal.getWiFiChannel().getChannel()));
         ((TextView) view.findViewById(R.id.frequency)).setText(String.format("%d%s", wiFiSignal.getFrequency(), WifiInfo.FREQUENCY_UNITS));
         ((TextView) view.findViewById(R.id.distance)).setText(String.format("%.1fm", wiFiSignal.getDistance()));
         ((TextView) view.findViewById(R.id.capabilities)).setText(wiFiDetail.getCapabilities());
-
 
         LayoutInflater layoutInflater = mainContext.getLayoutInflater();
 

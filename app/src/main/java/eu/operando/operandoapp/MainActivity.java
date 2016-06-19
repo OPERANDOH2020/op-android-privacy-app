@@ -23,13 +23,16 @@ package eu.operando.operandoapp;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.NotificationManager;
 import android.app.ProgressDialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
+import android.content.pm.PackageInfo;
 import android.graphics.Color;
-import android.net.wifi.WifiConfiguration;
+import android.net.TrafficStats;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.security.KeyChain;
@@ -37,23 +40,35 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
-import android.telephony.SubscriptionManager;
+import android.text.InputType;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.webkit.WebView;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TabHost;
+import android.widget.TableLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.squareup.otto.Subscribe;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.log4j.chainsaw.Main;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.littleshoot.proxy.mitm.Authority;
 import org.littleshoot.proxy.mitm.BouncyCastleSslEngineSource;
 import org.littleshoot.proxy.mitm.RootCertificateException;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -61,13 +76,19 @@ import java.net.Proxy;
 import java.security.GeneralSecurityException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 
 import be.shouldit.proxy.lib.APL;
-import be.shouldit.proxy.lib.APLNetworkId;
 import eu.operando.operandoapp.about.AboutActivity;
+import eu.operando.operandoapp.database.DatabaseHelper;
+import eu.operando.operandoapp.database.model.PendingNotification;
 import eu.operando.operandoapp.filters.domain.DomainFiltersActivity;
+import eu.operando.operandoapp.filters.domain.DomainManagerActivity;
+import eu.operando.operandoapp.filters.domain.PermissionsPerDomainActivity;
 import eu.operando.operandoapp.filters.response.ResponseFiltersActivity;
 import eu.operando.operandoapp.service.ProxyService;
 import eu.operando.operandoapp.settings.SettingActivity;
@@ -76,7 +97,9 @@ import eu.operando.operandoapp.settings.ThemeStyle;
 import eu.operando.operandoapp.util.CertificateUtil;
 import eu.operando.operandoapp.util.Logger;
 import eu.operando.operandoapp.util.MainUtil;
+import eu.operando.operandoapp.util.RequestFilterUtil;
 import eu.operando.operandoapp.wifi.AccessPointsActivity;
+import eu.operando.operandoapp.wifi.TrustedAccessPointsActivity;
 
 //proxy status: active, paused, stopped. (ean den exw certs, to isProxyRunning einai false).
 //link to proxy: established, non-established
@@ -101,12 +124,12 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
     private Button WiFiAPButton = null;
     private Button responseFiltersButton = null;
     private Button domainFiltersButton = null;
-    private Button debugLogButton = null;
-
+    private Button domainManagerButton = null;
+    private Button permissionsPerDomainButton = null;
+    private Button trustedAccessPointsButton = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
 
         MainUtil.initializeMainContext(getApplicationContext());
         Settings settings = mainContext.getSettings();
@@ -117,10 +140,10 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
         setContentView(R.layout.main_activity);
         settings.registerOnSharedPreferenceChangeListener(this);
 
-
         webView = (WebView) findViewById(R.id.webView);
         webView.getSettings().setJavaScriptEnabled(true);
 
+        //region Floating Action Button
 
         fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -146,7 +169,92 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
             }
         });
 
-        //Buttons
+        //endregion
+
+        //region TabHost
+
+        final TabHost tabHost = (TabHost) findViewById(R.id.tabHost2);
+        tabHost.setup();
+
+        TabHost.TabSpec tabSpec = tabHost.newTabSpec("wifi_ap");
+        tabSpec.setContent(R.id.WifiAndAccessPointsScrollView);
+        tabSpec.setIndicator("", getResources().getDrawable(R.drawable.ic_signal_wifi_3_bar_black_48dp));
+        tabHost.addTab(tabSpec);
+
+        tabSpec = tabHost.newTabSpec("response_domain_filters");
+        tabSpec.setContent(R.id.ResponseAndDomainFiltersScrollView);
+        tabSpec.setIndicator("", getResources().getDrawable(R.drawable.ic_filter));
+        tabHost.addTab(tabSpec);
+
+        tabSpec = tabHost.newTabSpec("pending_notifications");
+        tabSpec.setContent(R.id.PendingNotificationsScrollView);
+        tabSpec.setIndicator("", getResources().getDrawable(R.drawable.ic_pending_notification));
+        tabHost.addTab(tabSpec);
+
+        tabSpec = tabHost.newTabSpec("logs");
+        tabSpec.setContent(R.id.LogsScrollView);
+        tabSpec.setIndicator("", getResources().getDrawable(R.drawable.ic_report));
+        tabHost.addTab(tabSpec);
+
+        //endregion
+
+        tabHost.setOnTabChangedListener(new TabHost.OnTabChangeListener() {
+            @Override
+            public void onTabChanged(String tabId) {
+                switch (tabId){
+                    case "pending_notifications":
+                        //region Load Tab3
+                        ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.PendingNotificationsScrollView)).getChildAt(0)).getChildAt(1)).removeAllViews();
+                        LoadPendingNotificationsTab();
+                        //endregion
+                        break;
+                    case "logs":
+                        //region Load Tab 4
+                        //because it is a heavy task it is being loaded asynchronously
+                        ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.LogsScrollView)).getChildAt(0)).getChildAt(1)).removeAllViews();
+                        new AsyncTask() {
+                            private ProgressDialog mProgress;
+                            private List<String[]> apps;
+                            @Override
+                            protected void onPreExecute() {
+                                super.onPreExecute();
+                                mProgress = new ProgressDialog(MainActivity.this);
+                                mProgress.setCancelable(false);
+                                mProgress.setCanceledOnTouchOutside(false);
+                                mProgress.setTitle("Fetching Application Data Logs");
+                                mProgress.show();
+                            }
+
+                            @Override
+                            protected Object doInBackground(Object[] params) {
+                                apps = new ArrayList();
+                                for (String[] app : getInstalledApps(false)){
+                                    apps.add(new String[] {app[0], GetDataForApp(Integer.parseInt(app[1]))});
+                                }
+                                return null;
+                            }
+
+                            @Override
+                            protected void onPostExecute(Object o) {
+                                super.onPostExecute(o);
+                                mProgress.dismiss();
+                                for (String[] app : apps) {
+                                    if (app[0].contains(".")) {
+                                        continue;
+                                    }
+                                    TextView tv = new TextView(MainActivity.this);
+                                    tv.setText(app[0] + " || " + app[1]);
+                                    ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.LogsScrollView)).getChildAt(0)).getChildAt(1)).addView(tv);
+                                }
+                            }
+                        }.execute();
+                        //endregion
+                        break;
+                }
+            }
+        });
+
+        //region Buttons
 
         WiFiAPButton = (Button) findViewById(R.id.WiFiAPButton);
         WiFiAPButton.setOnClickListener(new View.OnClickListener() {
@@ -158,7 +266,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
                 startActivity(i);
             }
         });
-
 
         responseFiltersButton = (Button) findViewById(R.id.responseFiltersButton);
         responseFiltersButton.setOnClickListener(new View.OnClickListener() {
@@ -180,43 +287,83 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
             }
         });
 
-
-        /*debugLogButton = (Button) findViewById(R.id.debugLogButton);
-
-        debugLogButton.setOnClickListener(new View.OnClickListener() {
+        domainManagerButton = (Button) findViewById(R.id.domainManagerButton);
+        domainManagerButton.setOnClickListener(new View.OnClickListener() {
 
             @Override
             public void onClick(View v) {
-//                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-//
-//                builder.setPositiveButton(android.R.string.ok, null);
-//                builder.setTitle("Operando Proxy Conf");
-//                builder.setMessage("host: 127.0.0.1, port: 8899");
-//                builder.create().show();
-
-                Intent i = new Intent(android.provider.Settings.ACTION_APN_SETTINGS);
-                i.putExtra("sub_id", 1); //SubscriptionManager.NAME_SOURCE_SIM_SOURCE
+                Intent i = new Intent(mainContext.getContext(), DomainManagerActivity.class);
                 startActivity(i);
-
-
-                Map<APLNetworkId, WifiConfiguration> networks = APL.getConfiguredNetworks();
-                Iterator<Map.Entry<APLNetworkId, WifiConfiguration>> entries = networks.entrySet().iterator();
-                while (entries.hasNext()) {
-                    Map.Entry<APLNetworkId, WifiConfiguration> entry = entries.next();
-                    //System.out.println("Key = " + entry.getKey() + ", Value = " + entry.getValue());
-                }
-                try {
-                    Proxy proxy = APL.getCurrentHttpProxyConfiguration();
-                    InetSocketAddress proxyAddress = (InetSocketAddress) proxy.address();
-                    Log.e("OPERANDO", proxy.toString() + " --> " + proxyAddress.getHostName() + "::" + "---->" + proxyAddress.getPort());
-                } catch (Exception e) {
-                    //e.printStackTrace();
-                }
             }
         });
-        */
 
-        //Action Bar
+        permissionsPerDomainButton = (Button) findViewById(R.id.permissionsPerDomainButton);
+        permissionsPerDomainButton.setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                Intent i = new Intent(mainContext.getContext(), PermissionsPerDomainActivity.class);
+                startActivity(i);
+            }
+        });
+
+        trustedAccessPointsButton = (Button) findViewById(R.id.trustedAccessPointsButton);
+        trustedAccessPointsButton.setOnClickListener(new View.OnClickListener() {
+
+            @Override
+            public void onClick(View v) {
+                Intent i = new Intent(mainContext.getContext(), TrustedAccessPointsActivity.class);
+                startActivity(i);
+            }
+        });
+
+        //endregion
+
+        //region Set Phone Number
+
+        if (new RequestFilterUtil(MainActivity.this).getPhoneNumber().equals("")){
+            try {
+                final EditText phoneInput = new EditText(MainActivity.this);
+                phoneInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+                final File phoneFile = new File(getFilesDir(), "phonenumber.conf");
+                new AlertDialog.Builder(MainActivity.this)
+                        .setIcon(R.drawable.logo_bevel)
+                        .setTitle("Input phone number")
+                        .setMessage("The phone number could not be fetched automatically. Please input it below for automated exfiltration checks.")
+                        .setView(phoneInput)
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                try {
+                                    FileOutputStream stream = null;
+                                    try {
+                                        stream = new FileOutputStream(phoneFile);
+                                    } catch (Exception e) {
+                                        e.printStackTrace();
+                                    }
+                                    stream.write(phoneInput.getText().toString().getBytes());
+                                    stream.close();
+                                    Toast.makeText(getApplicationContext(), "Phone number saved successfully", Toast.LENGTH_SHORT).show();
+                                } catch (Exception e) {
+                                    Toast.makeText(getApplicationContext(), "Something went wrong", Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        })
+                        .setNeutralButton("Cancel", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                //nothing
+                            }
+                        })
+                        .show();
+            }catch (Exception e){
+                Log.d("ERROR", e.getMessage());
+            }
+        }
+
+        //endregion
+
+        //region Action Bar
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
@@ -225,8 +372,120 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
             setTitle(R.string.app_name);
         }
 
+        //endregion
+
+        //region Send Cached Settings
+        //Send cached settings if exist...
+        BufferedReader br = null;
+        try {
+            File file = new File(MainContext.INSTANCE.getContext().getFilesDir(), "resend.inf");
+            StringBuilder content = new StringBuilder();
+            br = new BufferedReader(new FileReader(file));
+            String line;
+            while ((line = br.readLine()) != null) {
+                content.append(line);
+            }
+            if (content.toString().equals("1")){
+                File f = new File(file.getCanonicalPath());
+                f.delete();
+                new DatabaseHelper(MainActivity.this).sendSettingsToServer(new RequestFilterUtil(MainActivity.this).getIMEI());
+            }
+        }catch(Exception ex){
+            ex.getMessage();
+        }finally{
+            try{br.close();}catch(Exception ex){ex.getMessage();}
+        }
+        //endregion
 
         initializeProxyService();
+    }
+
+    //region Overrides
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == 1) {
+            if (resultCode == Activity.RESULT_OK) {
+                startProxyService();
+            } else {
+                //super.onActivityResult(requestCode, resultCode, data);
+                if (mainContext.getAuthority().aliasFile(BouncyCastleSslEngineSource.KEY_STORE_FILE_EXTENSION).exists()) {
+                    mainContext.getAuthority().aliasFile(BouncyCastleSslEngineSource.KEY_STORE_FILE_EXTENSION).delete();
+                }
+            }
+        }
+    }
+
+    @Override
+    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
+        if (shouldReload()) {
+            reloadActivity();
+        } else {
+            mainContext.getScanner().update();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        mainContext.getBUS().unregister(this);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mainContext.getBUS().register(this);
+        updateStatusView();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.settings_menu:
+                Intent settingsIntent = new Intent(mainContext.getContext(), SettingActivity.class);
+                startActivity(settingsIntent);
+                return true;
+            case R.id.apn_menu: {
+                AlertDialog.Builder builder = new AlertDialog.Builder(this);
+                builder.setTitle(R.string.action_apn);
+                builder.setPositiveButton(android.R.string.cancel, null);
+                builder.setNegativeButton("Open APN Settings", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int id) {
+                        Intent apnIntent = new Intent(android.provider.Settings.ACTION_APN_SETTINGS);
+                        apnIntent.putExtra("sub_id", 1); //SubscriptionManager.NAME_SOURCE_SIM_SOURCE
+                        startActivity(apnIntent);
+                    }
+                });
+                String message = "In order to enable OperandoApp proxy while using wireless networks (e.g. 3G), you will need to modify the corresponding Access Point configuration for your provider. Please set the following values:\n\nProxy: 127.0.0.1\nPort: 8899";
+                builder.setMessage(message);
+                builder.create().show();
+
+                return true;
+            }
+            case R.id.help_menu:
+                Toast.makeText(this, "You have selected HELP (To be added).", Toast.LENGTH_SHORT).show();
+                return true;
+            case R.id.about_menu:
+                Intent aboutIntent = new Intent(mainContext.getContext(), AboutActivity.class);
+                startActivity(aboutIntent);
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
+
+    //endregion
+
+    @Subscribe
+    public void onOperandoStatusEvent(OperandoStatusEvent event) {
+        updateStatusView();
     }
 
     private void startProxyService() {
@@ -287,7 +546,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
 
     }
 
-
     private void initializeProxyService() {
         Authority authority = mainContext.getAuthority();
         try {
@@ -300,31 +558,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
             }
         } catch (RootCertificateException | GeneralSecurityException | OperatorCreationException | IOException ex) {
             Logger.error(this, ex.getMessage(), ex.getCause());
-        }
-    }
-
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == 1) {
-            if (resultCode == Activity.RESULT_OK) {
-                startProxyService();
-            } else {
-                //super.onActivityResult(requestCode, resultCode, data);
-                if (mainContext.getAuthority().aliasFile(BouncyCastleSslEngineSource.KEY_STORE_FILE_EXTENSION).exists()) {
-                    mainContext.getAuthority().aliasFile(BouncyCastleSslEngineSource.KEY_STORE_FILE_EXTENSION).delete();
-                }
-            }
-        }
-    }
-
-
-    @Override
-    public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-        if (shouldReload()) {
-            reloadActivity();
-        } else {
-            mainContext.getScanner().update();
         }
     }
 
@@ -346,21 +579,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
         startActivity(intent);
     }
 
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        mainContext.getBUS().unregister(this);
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mainContext.getBUS().register(this);
-        updateStatusView();
-    }
-
-
     private ThemeStyle currentThemeStyle;
 
     protected ThemeStyle getCurrentThemeStyle() {
@@ -371,64 +589,11 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
         this.currentThemeStyle = currentThemeStyle;
     }
 
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.settings_menu:
-                Intent settingsIntent = new Intent(mainContext.getContext(), SettingActivity.class);
-                startActivity(settingsIntent);
-                return true;
-            case R.id.apn_menu: {
-                AlertDialog.Builder builder = new AlertDialog.Builder(this);
-                builder.setTitle(R.string.action_apn);
-                builder.setPositiveButton(android.R.string.cancel, null);
-                builder.setNegativeButton("Open APN Settings", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int id) {
-                        Intent apnIntent = new Intent(android.provider.Settings.ACTION_APN_SETTINGS);
-                        apnIntent.putExtra("sub_id", 1); //SubscriptionManager.NAME_SOURCE_SIM_SOURCE
-                        startActivity(apnIntent);
-                    }
-                });
-                String message = "In order to enable OperandoApp proxy while using wireless networks (e.g. 3G), you will need to modify the corresponding Access Point configuration for your provider. Please set the following values:\n\nProxy: 127.0.0.1\nPort: 8899";
-                builder.setMessage(message);
-                builder.create().show();
-
-                return true;
-            }
-            case R.id.help_menu:
-                Toast.makeText(this, "You have selected HELP (To be added).", Toast.LENGTH_SHORT).show();
-                return true;
-            case R.id.about_menu:
-                Intent aboutIntent = new Intent(mainContext.getContext(), AboutActivity.class);
-                startActivity(aboutIntent);
-                return true;
-            default:
-                return super.onOptionsItemSelected(item);
-        }
-    }
-
-    @Subscribe
-    public void onOperandoStatusEvent(OperandoStatusEvent event) {
-        updateStatusView();
-    }
-
-
     private void updateStatusView() {
-
         OperandoProxyStatus proxyStatus = OperandoProxyStatus.STOPPED;
         OperandoProxyLink proxyLink = OperandoProxyLink.INVALID;
-
         boolean isProxyRunning = MainUtil.isServiceRunning(mainContext.getContext(), ProxyService.class);
         boolean isProxyPaused = MainUtil.isProxyPaused(mainContext);
-
         if (isProxyRunning) {
             if (isProxyPaused) {
                 proxyStatus = OperandoProxyStatus.PAUSED;
@@ -436,7 +601,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
                 proxyStatus = OperandoProxyStatus.ACTIVE;
             }
         }
-
         try {
             Proxy proxy = APL.getCurrentHttpProxyConfiguration();
             InetSocketAddress proxyAddress = (InetSocketAddress) proxy.address();
@@ -453,8 +617,6 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-
         String info = "";
         try {
             InputStream is = getResources().openRawResource(R.raw.info_template);
@@ -463,13 +625,121 @@ public class MainActivity extends AppCompatActivity implements OnSharedPreferenc
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-
         info = info.replace("@@status@@", proxyStatus.name());
         info = info.replace("@@link@@", proxyLink.name());
         webView.loadDataWithBaseURL("", info, "text/html", "UTF-8", "");
         webView.setBackgroundColor(Color.TRANSPARENT); //TRANSPARENT
+    }
 
+    private List<String[]> getInstalledApps(boolean getSysPackages) {
+        List<PackageInfo> packs = getPackageManager().getInstalledPackages(0);
+        Collections.sort(
+                packs, new Comparator<PackageInfo>() {
+                    @Override
+                    public int compare(PackageInfo arg0, PackageInfo arg1) {
+                        return (arg0.applicationInfo.loadLabel(getPackageManager()).toString()).compareTo(arg1.applicationInfo.loadLabel(getPackageManager()).toString());
+                    }
+                }
+        );
+        List<String[]> res = new ArrayList<>();
+        for(int i=0;i<packs.size();i++) {
+            PackageInfo p = packs.get(i);
+            if ((!getSysPackages) && (p.versionName == null)) {
+                continue ;
+            }
+            res.add(new String[] {p.applicationInfo.loadLabel(getPackageManager()).toString(), p.applicationInfo.uid + ""});
+        }
+        return res;
+    }
+
+    private String GetDataForApp(int uid){
+        String total;
+        try{
+            total = TrafficStats.getUidTxBytes(uid) + " bytes / " + TrafficStats.getUidRxBytes(uid) + " bytes";
+        } catch (Exception e){
+            total = "0 bytes / 0 bytes";
+        }
+        return total;
+    }
+
+    private void LoadPendingNotificationsTab(){
+        final String addAllowedSuccessful = "Added to Allowed Domains Successfully",
+                addAllowedUnsuccessfull = "This domain already exists in your allowed domain list",
+                addBlockedSuccessfull = "Added to Blocked Domains Successfully",
+                addBlockedUnsuccessfull = "This domain already exists in your blocked domain list";
+
+        try{
+            for (final PendingNotification pending_notification : new DatabaseHelper(this).getAllPendingNotifications()){
+                String info = pending_notification.app_info + " || " + pending_notification.permission + " || " + pending_notification.id;
+                Button b = new Button(this);
+                b.setText(info);
+                b.setLayoutParams(new LinearLayout.LayoutParams(android.app.ActionBar.LayoutParams.MATCH_PARENT, android.app.ActionBar.LayoutParams.WRAP_CONTENT));
+                ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.PendingNotificationsScrollView)).getChildAt(0)).getChildAt(1)).addView(b);
+                b.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        try {
+                            final int notificationId = Integer.parseInt(((Button) v).getText().toString().split(" \\|\\| ")[2]);
+                            new AlertDialog.Builder(MainActivity.this)
+                                    .setIcon(R.drawable.logo_bevel)
+                                    .setTitle("Manage Application Permission")
+                                    .setMessage("What do you want to do with this specific application permission?")
+                                    .setPositiveButton("ALLOW", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            try {
+                                                DatabaseHelper db = new DatabaseHelper(MainActivity.this);
+                                                boolean add = true;
+                                                for (String permission : pending_notification.permission.split("\\, ")) {
+                                                    add = add && db.addAllowedDomain(pending_notification.app_info, permission);
+                                                }
+                                                boolean remove = db.removePendingNotification(notificationId);
+                                                ((NotificationManager) MainActivity.this.getSystemService(Context.NOTIFICATION_SERVICE)).cancel(notificationId);
+                                                Toast.makeText(MainActivity.this, add && remove ? addAllowedSuccessful : addAllowedUnsuccessfull, Toast.LENGTH_SHORT).show();
+                                            } catch (Exception e) {
+                                                Toast.makeText(MainActivity.this, "Something went wrong", Toast.LENGTH_SHORT).show();
+                                            }
+                                            ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.PendingNotificationsScrollView)).getChildAt(0)).getChildAt(1)).removeAllViews();
+                                            LoadPendingNotificationsTab();
+                                            new DatabaseHelper(MainActivity.this).sendSettingsToServer(new RequestFilterUtil(MainActivity.this).getIMEI());
+                                        }
+                                    })
+                                    .setNegativeButton("BLOCK", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            try {
+                                                DatabaseHelper db = new DatabaseHelper(MainActivity.this);
+                                                boolean add = true;
+                                                for (String permission : pending_notification.permission.split("\\, ")) {
+                                                    add = add && db.addBlockedDomain(pending_notification.app_info, permission);
+                                                }
+                                                boolean remove = db.removePendingNotification(notificationId);
+                                                ((NotificationManager) MainActivity.this.getSystemService(Context.NOTIFICATION_SERVICE)).cancel(notificationId);
+                                                Toast.makeText(MainActivity.this, add && remove ? addBlockedSuccessfull : addBlockedUnsuccessfull, Toast.LENGTH_SHORT).show();
+                                            } catch (Exception e) {
+                                                Toast.makeText(MainActivity.this, "Something went wrong", Toast.LENGTH_SHORT).show();
+                                            }
+                                            ((TableLayout) ((LinearLayout) ((ScrollView) findViewById(R.id.PendingNotificationsScrollView)).getChildAt(0)).getChildAt(1)).removeAllViews();
+                                            LoadPendingNotificationsTab();
+                                            new DatabaseHelper(MainActivity.this).sendSettingsToServer(new RequestFilterUtil(MainActivity.this).getIMEI());
+                                        }
+                                    })
+                                    .setNeutralButton("Cancel", new DialogInterface.OnClickListener() {
+                                        @Override
+                                        public void onClick(DialogInterface dialog, int which) {
+                                            //nothing
+                                        }
+                                    })
+                                    .show();
+                        } catch (Exception e) {
+                            Log.d("ERROR", e.getMessage());
+                        }
+                    }
+                });
+            }
+        }catch(Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
     }
 
 }

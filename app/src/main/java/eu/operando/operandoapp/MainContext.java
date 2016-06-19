@@ -15,7 +15,7 @@
  * along with OperandoApp.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Contributors:
- *       Nikos Lykousas {UPRC}, Constantinos Patsakis {UPRC}
+ *       Nikos Lykousas {UPRC}, Periklis Maravelias, Constantinos Patsakis {UPRC}
  * Initially developed in the context of OPERANDO EU project www.operando.eu
  */
 
@@ -50,6 +50,7 @@ public enum MainContext {
     private SharedPreferences sharedPreferences;
     private DatabaseHelper databaseHelper;
     private Bus BUS;
+    private int NotificationId;
 
     public Bus getBUS() {
         return BUS;
@@ -129,7 +130,14 @@ public enum MainContext {
 
     public void setContext(@NonNull Context context) {
         this.context = context;
+        NotificationId = 1000;
     }
 
+    public int getNotificationId(){
+        return NotificationId;
+    }
 
+    public void setNotificationId(int NotificationId){
+        this.NotificationId = NotificationId;
+    }
 }

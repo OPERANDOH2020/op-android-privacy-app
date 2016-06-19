@@ -30,6 +30,7 @@ import android.os.Bundle;
 import android.util.Log;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
@@ -38,6 +39,8 @@ import be.shouldit.proxy.lib.APLNetworkId;
 import be.shouldit.proxy.lib.WiFiApConfig;
 import be.shouldit.proxy.lib.enums.SecurityType;
 import be.shouldit.proxy.lib.reflection.android.ProxySetting;
+import eu.operando.operandoapp.database.DatabaseHelper;
+import eu.operando.operandoapp.database.model.TrustedAccessPoint;
 
 /**
  * Class that executes the proxy change and listens to wifi state changes
@@ -58,6 +61,8 @@ public class ProxyChangeExecutor extends BroadcastReceiver {
 
 	private ProxyChangeAsync proxyChangeAsync;
 
+	private Context context;
+
 	// ***************************************************
 	// METHODS
 	// ***************************************************
@@ -71,6 +76,7 @@ public class ProxyChangeExecutor extends BroadcastReceiver {
 	 */
 	@Override
 	public void onReceive(Context context, Intent intent) {
+		this.context = context;
 		final ConnectivityManager connMgr = (ConnectivityManager) context
 				.getSystemService(Context.CONNECTIVITY_SERVICE);
 		final NetworkInfo wifi = connMgr
@@ -193,19 +199,44 @@ public class ProxyChangeExecutor extends BroadcastReceiver {
 					&& (newConfig.getProxyExclusionList().isEmpty()
 					|| newConfig.getProxyExclusionList().equals(params.getBypass()))) {
 
-				proxyChangeAsync.onProgressUpdate("Proxy on " + newConfig.getSSID()
-						+ " with security " + newConfig.getSecurityType().name()
-						+ " set to " + params.getHost() + ":" + params.getPort()
-						+ " bypass: " + params.getBypass());
-				try {
-					proxyChangeAsync.onProgressUpdate("Checking wifi connectivity...");
-					waitForWifiConnectivity();
-					proxyChangeAsync.onProgressUpdate("Wifi connected and proxy set!");
-				} catch (Exception e) {
-					proxyChangeAsync.onProgressUpdate("Warning: Wifi is not connected. Check that the " +
-							"correct SSID and key combination were given.");
-					Log.e(TAG, "", e);
-					clearWifiConfigs();
+				DatabaseHelper dbh = new DatabaseHelper(this.context);
+				List<TrustedAccessPoint> trustedAccessPoints = dbh.getAllTrustedAccessPoints();
+				String ssid = ((WifiManager) context.getSystemService(Context.WIFI_SERVICE)).getConnectionInfo().getSSID();
+				String bssid = ((WifiManager) context.getSystemService(Context.WIFI_SERVICE)).getConnectionInfo().getBSSID();
+				TrustedAccessPoint currentAccessPoint = new TrustedAccessPoint(ssid, bssid);
+				boolean trusted = false;
+				for (TrustedAccessPoint tap : trustedAccessPoints){
+					if (currentAccessPoint.isEqual(tap)){
+						trusted = true;
+					}
+				}
+				if (!trusted) {
+					if ((trusted = dbh.addTrustedAccessPoint(currentAccessPoint))) {
+						proxyChangeAsync.onProgressUpdate("Current SSID and MAC were added to trusted MAC list!");
+					} else {
+						proxyChangeAsync.onProgressUpdate("There is another SSID stored in your trusted MAC address!");
+						APL.getWifiManager().removeNetwork(APL.getConfiguredNetwork(params.getNetworkId()).networkId);
+					}
+				}
+
+				if (trusted) {
+					proxyChangeAsync.onProgressUpdate("Proxy on " + newConfig.getSSID()
+							+ " with security " + newConfig.getSecurityType().name()
+							+ " set to " + params.getHost() + ":" + params.getPort()
+							+ " bypass: " + params.getBypass());
+					try {
+						proxyChangeAsync.onProgressUpdate("Checking wifi connectivity...");
+						waitForWifiConnectivity();
+						proxyChangeAsync.onProgressUpdate("Wifi connected and proxy set!");
+					} catch (Exception e) {
+						proxyChangeAsync.onProgressUpdate("Warning: Wifi is not connected. Check that the " +
+								"correct SSID and key combination were given.");
+						Log.e(TAG, "", e);
+						clearWifiConfigs();
+					}
+				} else {
+					proxyChangeAsync.onProgressUpdate("Wifi is not connected due to suspicious SSID & MAC " +
+							"combination according to your trusted MAC list!");
 				}
 			} else {
 				Log.e(TAG, "Proxy not cleared or does not match proxy settings: " + newConfig);

@@ -25,8 +25,8 @@
   </style>
 </head>
 <body>
-PROXY STATUS: <span class="@@status@@">@@status@@</span>
+<span style="color:black;">PROXY STATUS: </span><span class="@@status@@">@@status@@</span>
   <hr />
-LINK STATUS: <span class="@@link@@">@@link@@</span>
+<span style="color:black;">LINK STATUS: </span><span class="@@link@@">@@link@@</span>
 </body>
 </html>

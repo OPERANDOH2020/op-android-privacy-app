@@ -25,6 +25,7 @@ import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.support.annotation.NonNull;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -101,6 +102,7 @@ public class ConnectClickListener implements View.OnClickListener {
 
         //Key textfield
         etConnectPwd = (EditText) dialogView.findViewById(R.id.et_connect_pwd);
+        etConnectPwd.setHintTextColor(Color.LTGRAY);
         etConnectPwd.addTextChangedListener(new TextWatcher() {
             @Override
             public void afterTextChanged(Editable s) {

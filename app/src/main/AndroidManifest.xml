@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="eu.operando.operandoapp">
 
@@ -18,13 +19,12 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/ThemeAppCompatDark">
+        android:theme="@style/ThemeAppCompatLight">
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
@@ -59,53 +59,74 @@
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="eu.operando.operandoapp.MainActivity" />
         </activity>
-
         <activity
             android:name=".filters.response.ResponseFiltersActivity"
-            android:label="@string/response_filters">
+            android:label="@string/response_filters"
+            android:parentActivityName=".MainActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="eu.operando.operandoapp.MainActivity" />
         </activity>
-
         <activity
             android:name=".filters.domain.DomainFiltersActivity"
-            android:label="@string/domain_filters">
+            android:label="@string/domain_filters"
+            android:parentActivityName=".MainActivity">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="eu.operando.operandoapp.MainActivity" />
         </activity>
+        <activity
+            android:name=".filters.domain.DomainManagerActivity"
+            android:label="@string/title_activity_domain_manager"
+            android:parentActivityName=".MainActivity"/>
+        <activity
+            android:name=".filters.domain.PermissionsPerDomainActivity"
+            android:label="@string/title_activity_permissions_per_domain"
+            android:parentActivityName=".MainActivity"/>
+        <activity
+            android:name=".wifi.TrustedAccessPointsActivity"
+            android:label="@string/title_activity_trusted_access_points"
+            android:parentActivityName=".MainActivity"/>
 
         <!-- Declaring broadcast receiver for BOOT_COMPLETED event. -->
         <receiver
             android:name=".service.receivers.BootEventReceiver"
             android:enabled="true"
-            android:exported="false" >
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+
                 <category android:name="android.intent.category.HOME" />
             </intent-filter>
         </receiver>
-
         <receiver
             android:name=".service.receivers.ConnectivityStateReceiver"
             android:enabled="true"
-            android:exported="false" >
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
             </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".service.receivers.NotificationActivityReceiver"
+            android:enabled="true"
+            android:exported="false">
+
+            <!--
+            <intent-filter>
+                <action android:name="android.net.wifi.WIFI_STATE_CHANGED" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+            </intent-filter>
+            -->
         </receiver>
 
         <service
             android:name=".service.BootNotificationService"
-            android:enabled="true" >
-        </service>
-
+            android:enabled="true" />
         <service
             android:name=".service.ProxyService"
-            android:enabled="true" >
-        </service>
+            android:enabled="true" />
 
     </application>
 

@@ -26,22 +26,58 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.text.TextUtils;
 import android.util.Log;
+import android.util.Xml;
 
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.io.filefilter.TrueFileFilter;
+import org.bouncycastle.crypto.digests.MD5Digest;
+import org.bouncycastle.crypto.digests.SHA1Digest;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.xmlpull.v1.XmlSerializer;
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.StringWriter;
+import java.io.Writer;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
+import eu.operando.operandoapp.MainContext;
+import eu.operando.operandoapp.database.model.AllowedDomain;
+import eu.operando.operandoapp.database.model.BlockedDomain;
 import eu.operando.operandoapp.database.model.DomainFilter;
 import eu.operando.operandoapp.database.model.FilterFile;
+import eu.operando.operandoapp.database.model.PendingNotification;
 import eu.operando.operandoapp.database.model.ResponseFilter;
+import eu.operando.operandoapp.database.model.TrustedAccessPoint;
+import eu.operando.operandoapp.util.RequestFilterUtil;
 
 /**
  * Created by nikos on 11/5/2016.
  */
 public class DatabaseHelper extends SQLiteOpenHelper {
+
+    //region Variable Declaration
 
     // Logcat tag
     private static final String LOG = "DatabaseHelper";
@@ -55,7 +91,10 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     // Table Names
     private static final String TABLE_RESPONSE_FILTERS = "response_filters";
     private static final String TABLE_DOMAIN_FILTERS = "domain_filters";
-
+    private static final String TABLE_ALLOWED_DOMAINS = "allowed_domains";
+    private static final String TABLE_BLOCKED_DOMAINS = "blocked_domains";
+    private static final String TABLE_PENDING_NOTIFICATIONS = "pending_notifications";
+    private static final String TABLE_TRUSTED_ACCESS_POINTS = "trusted_access_points";
 
     //column names
     private static final String KEY_ID = "id";
@@ -64,21 +103,41 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String KEY_SOURCE = "source";
     private static final String KEY_COUNT = "filtercount";
     private static final String KEY_WILDCARD = "iswildcard";
+    private static final String KEY_APP_INFO = "app_info";
+    private static final String KEY_APP_NAME = "app_name";
+    private static final String KEY_NOTIFICATION_ID = "notification_id";
+    private static final String KEY_PERMISSIONS = "permissions";
+    private static final String KEY_SSID = "ssid";
+    private static final String KEY_BSSID = "bssid";
 
+    //endregion
 
-    private int LIMIT = 500;
+    //region Table Creation
 
-
-    // Table Create Statements
     private static final String CREATE_TABLE_RESPONSE_FILTERS = "CREATE TABLE "
             + TABLE_RESPONSE_FILTERS + "(" + KEY_ID + " INTEGER PRIMARY KEY," + KEY_CONTENT
-            + " TEXT," + KEY_SOURCE + " TEXT ," + KEY_MODIFIED
+            + " TEXT," + KEY_SOURCE + " TEXT," + KEY_MODIFIED
             + " DATETIME" + ")";
     private static final String CREATE_TABLE_DOMAIN_FILTERS = "CREATE TABLE "
             + TABLE_DOMAIN_FILTERS + "(" + KEY_ID + " INTEGER PRIMARY KEY," + KEY_CONTENT
-            + " TEXT," + KEY_SOURCE + " TEXT ," + KEY_WILDCARD + " INTEGER ," + KEY_MODIFIED
+            + " TEXT," + KEY_SOURCE + " TEXT," + KEY_WILDCARD + " INTEGER," + KEY_MODIFIED
             + " DATETIME" + ")";
+    private static final String CREATE_TABLE_ALLOWED_DOMAINS = "CREATE TABLE "
+            + TABLE_ALLOWED_DOMAINS + "(" + KEY_APP_INFO
+            + " TEXT," + KEY_PERMISSIONS + " TEXT, PRIMARY KEY (" + KEY_APP_INFO + ", " + KEY_PERMISSIONS + "))";
+    private static final String CREATE_TABLE_BLOCKED_DOMAINS = "CREATE TABLE "
+            + TABLE_BLOCKED_DOMAINS + "(" + KEY_APP_INFO
+            + " TEXT," + KEY_PERMISSIONS + " TEXT, PRIMARY KEY (" + KEY_APP_INFO + ", " + KEY_PERMISSIONS + "))";
+    private static final String CREATE_TABLE_PENDING_NOTIFICATIONS = "CREATE TABLE "
+            + TABLE_PENDING_NOTIFICATIONS + "(" + KEY_APP_INFO + " TEXT PRIMARY KEY," + KEY_APP_NAME
+            + " TEXT," + KEY_PERMISSIONS + " TEXT," + KEY_NOTIFICATION_ID + " INTEGER)";
+    private static final String CREATE_TABLE_TRUSTED_ACCESS_POINTS = "CREATE TABLE "
+            + TABLE_TRUSTED_ACCESS_POINTS + "(" + KEY_SSID + " TEXT PRIMARY KEY," + KEY_BSSID + " TEXT" + ")";
+    private int LIMIT = 500;
 
+    //endregion
+
+    //region DatabaseHelper Special Functions
 
     public DatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -87,9 +146,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
 
-        // creating required tables
-        db.execSQL(CREATE_TABLE_RESPONSE_FILTERS);
-        db.execSQL(CREATE_TABLE_DOMAIN_FILTERS);
+        try {
+            // creating required tables
+            db.execSQL(CREATE_TABLE_RESPONSE_FILTERS);
+            db.execSQL(CREATE_TABLE_DOMAIN_FILTERS);
+            db.execSQL(CREATE_TABLE_ALLOWED_DOMAINS);
+            db.execSQL(CREATE_TABLE_BLOCKED_DOMAINS);
+            db.execSQL(CREATE_TABLE_PENDING_NOTIFICATIONS);
+            db.execSQL(CREATE_TABLE_TRUSTED_ACCESS_POINTS);
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
 
     }
 
@@ -98,17 +165,26 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         // on upgrade drop older tables
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_RESPONSE_FILTERS);
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_DOMAIN_FILTERS);
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_ALLOWED_DOMAINS);
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_BLOCKED_DOMAINS);
+        db.execSQL("DROP TABLE IF EXISTS " + TABLE_PENDING_NOTIFICATIONS);
+        db.execSQL("DROP TABLE IF EXISTS " + CREATE_TABLE_TRUSTED_ACCESS_POINTS);
 
         // create new tables
         onCreate(db);
     }
 
+    private String getDateTime() {
+        SimpleDateFormat dateFormat = new SimpleDateFormat(
+                "yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        Date date = new Date();
+        return dateFormat.format(date);
+    }
 
-    /*
-    ------------------------------------------------------------------
-    Response Filters
-    ------------------------------------------------------------------
-     */
+    //endregion
+
+    //region Response Filters
+
     public int createResponseFilter(ResponseFilter responseFilter) {
         SQLiteDatabase db = this.getWritableDatabase();
 
@@ -190,7 +266,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return responseFilters;
     }
 
-
     public List<FilterFile> getAllResponseFilterFiles() {
         List<FilterFile> filterFiles = new ArrayList<>();
         String selectQuery = "SELECT " + KEY_SOURCE + ", COUNT(*) AS " + KEY_COUNT + " FROM " + TABLE_RESPONSE_FILTERS
@@ -214,7 +289,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return filterFiles;
     }
 
-
     public List<String> getAllResponseFiltersForSource(String source) {
         List<String> filters = new ArrayList<>();
         String selectQuery = "SELECT " + KEY_CONTENT + " FROM " + TABLE_RESPONSE_FILTERS
@@ -237,7 +311,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         return filters;
     }
-
 
     public int getResponseFilterCount() {
         String countQuery = "SELECT  * FROM " + TABLE_RESPONSE_FILTERS;
@@ -264,9 +337,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{String.valueOf(responseFilter.getId())});
     }
 
-    /*
-     * Deleting
-     */
     public int deleteResponseFilter(ResponseFilter responseFilter) {
         return deleteResponseFilter(responseFilter.getId());
     }
@@ -287,11 +357,9 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{source});
     }
 
-     /*
-    ------------------------------------------------------------------
-    Domain Filters
-    ------------------------------------------------------------------
-     */
+    //endregion
+
+    //region Domain Filters
 
     public int createDomainFilter(DomainFilter domainFilter) {
         SQLiteDatabase db = this.getWritableDatabase();
@@ -313,7 +381,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         String selectQuery = "SELECT  * FROM " + TABLE_DOMAIN_FILTERS + " WHERE "
                 + KEY_ID + " = " + id;
-
 
         Cursor c = db.rawQuery(selectQuery, null);
 
@@ -376,7 +443,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return domainFilters;
     }
 
-
     public List<FilterFile> getAllDomainFilterFiles() {
         List<FilterFile> filterFiles = new ArrayList<>();
         String selectQuery = "SELECT " + KEY_SOURCE + ", COUNT(*) AS " + KEY_COUNT + " FROM " + TABLE_DOMAIN_FILTERS
@@ -395,7 +461,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
         return filterFiles;
     }
-
 
     public List<String> getAllDomainFiltersForSource(String source) {
         List<String> filters = new ArrayList<>();
@@ -431,7 +496,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         return (count > 0);
     }
 
-
     public int getDomainFilterCount() {
         String countQuery = "SELECT  * FROM " + TABLE_DOMAIN_FILTERS;
         SQLiteDatabase db = this.getReadableDatabase();
@@ -458,9 +522,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{String.valueOf(domainFilter.getId())});
     }
 
-    /*
-     * Deleting a filter
-     */
     public int deleteDomainFilter(DomainFilter domainFilter) {
         return deleteDomainFilter(domainFilter.getId());
     }
@@ -481,16 +542,344 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 new String[]{source});
     }
 
+    //endregion
 
-    /**
-     * get datetime
+    //region Pending Notifications
+
+    /*
+    ------------------------------------------------------------------
+    Pending Notification
+    ------------------------------------------------------------------
      */
-    private String getDateTime() {
-        SimpleDateFormat dateFormat = new SimpleDateFormat(
-                "yyyy-MM-dd HH:mm:ss", Locale.getDefault());
-        Date date = new Date();
-        return dateFormat.format(date);
+    public List<PendingNotification> getAllPendingNotifications(){
+        List<PendingNotification> pendingNotifications = new ArrayList<>();
+        try{
+            String selectQuery = "SELECT * FROM " + TABLE_PENDING_NOTIFICATIONS;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    PendingNotification pendingNotification = new PendingNotification(
+                            c.getString(c.getColumnIndex(KEY_APP_INFO)),
+                            c.getString(c.getColumnIndex(KEY_PERMISSIONS)),
+                            c.getInt(c.getColumnIndex(KEY_NOTIFICATION_ID))
+                    );
+                    pendingNotifications.add(pendingNotification);
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return pendingNotifications;
     }
 
+    public boolean addPendingNotification(PendingNotification pendingNotification){
+        String appInfo = pendingNotification.app_info;
+        String permissions = pendingNotification.permission;
+        String appName = pendingNotification.app_name;
+        int notificationId = pendingNotification.id;
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(KEY_APP_INFO, appInfo);
+        values.put(KEY_APP_NAME, appName);
+        values.put(KEY_PERMISSIONS, permissions);
+        values.put(KEY_NOTIFICATION_ID, notificationId);
+        int id = (int) db.insert(TABLE_PENDING_NOTIFICATIONS, null, values);
+        return id >= 0;
+    }
+
+    public boolean removePendingNotification(int notificationId){
+        SQLiteDatabase db = this.getWritableDatabase();
+        int id = (int) db.delete(TABLE_PENDING_NOTIFICATIONS, KEY_NOTIFICATION_ID + "='" + notificationId + "'", null);
+        return id >= 0;
+    }
+
+    //endregion
+
+    //region Allowed Domains & Apps
+
+    /*
+    ------------------------------------------------------------------
+    Allowed Domain
+    ------------------------------------------------------------------
+     */
+
+    public List<AllowedDomain> getAllAllowedDomains() {
+        List<AllowedDomain> allowedDomains = new ArrayList<>();
+        try {
+            String selectQuery = "SELECT * FROM " + TABLE_ALLOWED_DOMAINS;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    AllowedDomain allowedDomain = new AllowedDomain(c.getString(c.getColumnIndex(KEY_APP_INFO)), c.getString(c.getColumnIndex(KEY_PERMISSIONS)));
+                    allowedDomains.add(allowedDomain);
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return allowedDomains;
+    }
+
+    public List<String[]> getAllPermissionsPerAllowedDomain() {
+        List<String[]> result = new ArrayList<>();
+        try {
+            String KEY_CONCAT_PERMISSIONS = "concat_permissions";
+            String selectQuery =
+                    "SELECT " + KEY_APP_INFO + ", GROUP_CONCAT(" + KEY_PERMISSIONS + ") AS " + KEY_CONCAT_PERMISSIONS +
+                    " FROM (" +
+                        "SELECT " + KEY_APP_INFO + ", " + KEY_PERMISSIONS +
+                        " FROM " + TABLE_ALLOWED_DOMAINS +
+                        " ORDER BY " + KEY_APP_INFO + ", " + KEY_PERMISSIONS +
+                    ") " +
+                    "GROUP BY " + KEY_APP_INFO;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    result.add(new String[] {c.getString(c.getColumnIndex(KEY_APP_INFO)), c.getString(c.getColumnIndex(KEY_CONCAT_PERMISSIONS))});
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return result;
+    }
+
+    public boolean addAllowedDomain(String domain, String exfiltrated) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(KEY_APP_INFO, domain.trim());
+        values.put(KEY_PERMISSIONS, exfiltrated);
+        int id = (int) db.insert(TABLE_ALLOWED_DOMAINS, null, values);
+        return id >= 0;
+    }
+
+    public boolean removeAllowedDomain(String domain, String exfiltrated){
+        SQLiteDatabase db = this.getWritableDatabase();
+        try {
+            int id = (int) db.delete(TABLE_ALLOWED_DOMAINS, KEY_APP_INFO + " LIKE '" + domain + "%' AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
+            return true;
+        } catch (Exception e){
+            e.getMessage();
+            return false;
+        }
+    }
+
+    //endregion
+
+    //region Blocked Domains & Apps
+
+    /*
+    ------------------------------------------------------------------
+    Blocked Domain
+    ------------------------------------------------------------------
+     */
+
+    public List<BlockedDomain> getAllBlockedDomains(){
+        List<BlockedDomain> blockedDomains = new ArrayList<>();
+        try {
+            String selectQuery = "SELECT * FROM " + TABLE_BLOCKED_DOMAINS;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    BlockedDomain blockedDomain = new BlockedDomain(c.getString(c.getColumnIndex(KEY_APP_INFO)), c.getString(c.getColumnIndex(KEY_PERMISSIONS)));
+                    blockedDomains.add(blockedDomain);
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return blockedDomains;
+    }
+
+    public List<String[]> getAllPermissionsPerBlockedDomain(){
+        List<String[]> result = new ArrayList<>();
+        try {
+            String KEY_CONCAT_PERMISSIONS = "concat_permissions";
+            String selectQuery =
+                    "SELECT " + KEY_APP_INFO + ", GROUP_CONCAT(" + KEY_PERMISSIONS + ") AS " + KEY_CONCAT_PERMISSIONS +
+                            " FROM (" +
+                            "SELECT " + KEY_APP_INFO + ", " + KEY_PERMISSIONS +
+                            " FROM " + TABLE_BLOCKED_DOMAINS +
+                            " ORDER BY " + KEY_APP_INFO + ", " + KEY_PERMISSIONS +
+                            ") " +
+                            "GROUP BY " + KEY_APP_INFO;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    result.add(new String[] {c.getString(c.getColumnIndex(KEY_APP_INFO)), c.getString(c.getColumnIndex(KEY_CONCAT_PERMISSIONS))});
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return result;
+    }
+
+    public boolean addBlockedDomain(String domain, String exfiltrated) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(KEY_APP_INFO, domain.trim());
+        values.put(KEY_PERMISSIONS, exfiltrated);
+        int id = (int) db.insert(TABLE_BLOCKED_DOMAINS, null, values);
+        return id >= 0;
+    }
+
+    public boolean removeBlockedDomain(String domain, String exfiltrated){
+        SQLiteDatabase db = this.getWritableDatabase();
+        try {
+            int id = (int) db.delete(TABLE_BLOCKED_DOMAINS, KEY_APP_INFO + "= %" + domain + "% AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
+            return id > 0;
+        } catch (Exception e){
+            return false;
+        }
+    }
+
+    //endregion
+
+    //region Trusted Access Points
+
+    public List<TrustedAccessPoint> getAllTrustedAccessPoints(){
+        List<TrustedAccessPoint> trustedAccessPoints = new ArrayList<>();
+        try {
+            String selectQuery = "SELECT * FROM " + TABLE_TRUSTED_ACCESS_POINTS;
+            SQLiteDatabase db = this.getReadableDatabase();
+            Cursor c = db.rawQuery(selectQuery, null);
+            if (c.moveToFirst()) {
+                do {
+                    TrustedAccessPoint trustedAccessPoint = new TrustedAccessPoint(c.getString(c.getColumnIndex(KEY_SSID)), c.getString(c.getColumnIndex(KEY_BSSID)));
+                    trustedAccessPoints.add(trustedAccessPoint);
+                } while (c.moveToNext());
+            }
+        } catch (Exception e){
+            Log.d("ERROR", e.getMessage());
+        }
+        return trustedAccessPoints;
+    }
+
+    public boolean addTrustedAccessPoint(TrustedAccessPoint tap) {
+        SQLiteDatabase db = this.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(KEY_SSID, tap.ssid);
+        values.put(KEY_BSSID, tap.bssid);
+        int id = (int) db.insert(TABLE_TRUSTED_ACCESS_POINTS, null, values);
+        return id >= 0;
+    }
+
+    public boolean removeTrustedAccessPoint(TrustedAccessPoint tap){
+        SQLiteDatabase db = this.getWritableDatabase();
+        int id = (int) db.delete(TABLE_TRUSTED_ACCESS_POINTS, KEY_SSID + "='" + tap.ssid + "' AND " + KEY_BSSID + "='" + tap.bssid + "'", null);
+        return id > 0;
+    }
+
+    //endregion
+
+    //region Export All Permissions Per Domain
+
+    public void sendSettingsToServer(final String imei){
+        Thread thread = new Thread(new Runnable(){
+            @Override
+            public void run() {
+                String xml_settings = exportAllPermissionsPerDomain();
+                if (xml_settings != null){
+                    try {
+                        String urlParameters = "userxml=" + xml_settings + "&userID=" + DigestUtils.sha1(imei);
+                        byte[] postData = urlParameters.getBytes(StandardCharsets.UTF_8);
+                        URL url = new URL("http", "192.168.1.104", 5000, "prefs");
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setReadTimeout(15000);
+                        conn.setConnectTimeout(15000);
+                        conn.setRequestMethod("POST");
+                        conn.setDoInput(true);
+                        conn.setDoOutput(true);
+                        try( DataOutputStream wr = new DataOutputStream( conn.getOutputStream())) {
+                            wr.write( postData );
+                        }
+                        int responseCode=conn.getResponseCode();
+                        if (responseCode == HttpURLConnection.HTTP_OK){
+                            //Do something on HTTP_OK ?????
+                        }
+                        else{
+                            throw new Exception();
+                        }
+                        Log.d("SENT", Integer.toString(responseCode));
+                } catch (Exception e){
+                        //TODO cache and retry later
+                        //create a file as database to resend later
+                        Writer writer = null;
+                        try {
+                            File file = new File(MainContext.INSTANCE.getContext().getFilesDir(), "resend.inf");
+                            if (!file.exists()){
+                                writer = new BufferedWriter(new FileWriter(file));
+                                writer.write("1"); //currently putting 1 for "true" to resend
+                            }
+                        }catch(Exception ex){
+                            ex.getMessage();
+                        }finally{
+                            try{
+                                writer.close();
+                            }catch(Exception ex){
+                                ex.getMessage();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        thread.start();
+    }
+
+    public String exportAllPermissionsPerDomain(){
+        List<String[]> result1 = getAllPermissionsPerAllowedDomain();
+        List<String[]> result2 = getAllPermissionsPerBlockedDomain();
+        XmlSerializer serializer = Xml.newSerializer();
+        StringWriter sw = new StringWriter();
+        try{
+            serializer.setOutput(sw);
+            serializer.startDocument("UTF-8", true);
+            serializer.startTag("", "settings");
+            //allowed
+            serializer.startTag("", "allowed");
+            for (String[] s : result1){
+                serializer.startTag("", "app");
+                serializer.attribute("", "app_name", s[0].replaceAll("\\(.*?\\)", ""));
+                serializer.startTag("", "app_info");
+                serializer.text(s[0]);
+                serializer.endTag("", "app_info");
+                serializer.startTag("", "permissions");
+                serializer.text(s[1]);
+                serializer.endTag("", "permissions");
+                serializer.endTag("", "app");
+            }
+            serializer.endTag("", "allowed");
+            //blocked
+            serializer.startTag("", "blocked");
+            for (String[] s : result2){
+                serializer.startTag("", "app");
+                serializer.attribute("", "app_name", s[0].replaceAll("\\(.*?\\)", ""));
+                serializer.startTag("", "app_info");
+                serializer.text(s[0]);
+                serializer.endTag("", "app_info");
+                serializer.startTag("", "permissions");
+                serializer.text(s[1]);
+                serializer.endTag("", "permissions");
+                serializer.endTag("", "app");
+            }
+            serializer.endTag("", "blocked");
+            serializer.endTag("", "settings");
+            serializer.endDocument();
+            serializer.flush();
+        }catch(Exception e){
+            e.printStackTrace();
+            return null;
+        }
+        return sw.toString();
+    }
+
+    //endregion
 
 }

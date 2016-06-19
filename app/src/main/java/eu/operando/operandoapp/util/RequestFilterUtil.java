@@ -21,17 +21,31 @@
 
 package eu.operando.operandoapp.util;
 
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.database.Cursor;
 import android.provider.ContactsContract;
+import android.support.annotation.RequiresPermission;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.TelephonyManager;
+import android.util.Log;
+import android.widget.EditText;
+import android.widget.Toast;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import eu.operando.operandoapp.MainContext;
+import eu.operando.operandoapp.R;
 import eu.operando.operandoapp.util.LocationHelper.GPSTracker;
 
 /**
@@ -42,27 +56,44 @@ public class RequestFilterUtil {
     TelephonyManager telephonyManager;
     GPSTracker gpsTracker;
 
-
     String[] contactsInfo;
-    String[] phoneInfo;
+    String IMEI, phoneNumber, subscriberID, carrierName, androidID;
+    String[] macAddresses;
 
     public RequestFilterUtil(Context context) {
         this.context = context;
-        telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
-        gpsTracker = new GPSTracker(context);
+        this.telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        this.gpsTracker = new GPSTracker(context);
         this.contactsInfo = genContactsInfo();
-        this.phoneInfo = genPhoneInfo();
+        this.IMEI = genIMEI();
+        this.phoneNumber = genPhoneNumber();
+        this.subscriberID = genSubscriberID();
+        this.carrierName = genCarrierName();
+        this.androidID = genAndroidID();
+        this.macAddresses = genMacAddresses();
     }
 
-    public String[] genPhoneInfo() {
-        String IMEI = telephonyManager.getDeviceId();
-        String phoneNumber = telephonyManager.getLine1Number();
-        String subscriberID = telephonyManager.getSubscriberId(); //IMSI
-        String carrierName = telephonyManager.getNetworkOperatorName();
-        String androidId = android.provider.Settings.Secure.getString(context.getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
-        return new String[]{IMEI, phoneNumber, subscriberID, carrierName};
+    //region Generate Phone Info
+
+    public String genIMEI(){
+        return telephonyManager.getDeviceId();
     }
 
+    public String genPhoneNumber(){
+        return telephonyManager.getLine1Number();
+    }
+
+    public String genSubscriberID() {
+        return telephonyManager.getSubscriberId();
+    }
+
+    public String genCarrierName(){
+        return telephonyManager.getNetworkOperatorName();
+    }
+
+    public String genAndroidID(){
+        return android.provider.Settings.Secure.getString(context.getContentResolver(), android.provider.Settings.Secure.ANDROID_ID);
+    }
 
     public String[] genContactsInfo() {
         Cursor phones = context.getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI, null, null, null, null);
@@ -81,12 +112,68 @@ public class RequestFilterUtil {
         return ret.toArray(new String[ret.size()]);
     }
 
+    public String[] genMacAddresses(){
+        List<String> result = new ArrayList<>();
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(new File("/proc/net/arp")));
+            //--omit first line--
+            String firstLine = br.readLine();
+            //-------------------
+            String line;
+            while((line = br.readLine()) != null) {
+                result.add(line.split("\\s+")[3]);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return result.toArray(new String[result.size()]);
+    }
+
+    //endregion
+
+    //region Getters
+
     public String[] getContactsInfo() {
         return contactsInfo;
     }
 
-    public String[] getPhoneInfo() {
-        return phoneInfo;
+    public String getIMEI() {
+        return this.IMEI;
+    }
+
+    public String getPhoneNumber() {
+        if (this.phoneNumber.equals("")){
+            return ReadFile(new File(context.getFilesDir(), "phonenumber.conf"));
+        }
+        return this.phoneNumber;
+    }
+
+    public String ReadFile(File f){
+        StringBuilder text = new StringBuilder();
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(f));
+            String line;
+            while ((line = br.readLine()) != null) {
+                text.append(line);
+            }
+            br.close();
+        }
+        catch (IOException e) {
+            Log.d("ERROR", e.getMessage());
+        }
+        return text.toString();
+    }
+
+    public String getSubscriberID() {
+        return this.subscriberID;
+    }
+
+    public String getCarrierName() {
+        return this.carrierName;
+    }
+
+    public String getAndroidID() {
+        return this.androidID;
     }
 
     public String[] getLocationInfo() {
@@ -99,25 +186,49 @@ public class RequestFilterUtil {
         return ret.toArray(new String[ret.size()]);
     }
 
+    public String[] getMacAddresses(){
+        return this.macAddresses;
+    }
+
+    //endregion
+
+    //region Filter Enumerator
 
     public enum FilterType {
         CONTACTS,
-        PHONEINFO,
-        LOCATION
+        IMEI,
+        PHONENUMBER,
+        IMSI,
+        CARRIERNAME,
+        ANDROIDID,
+        LOCATION,
+        MACADRESSES
     }
+
+    //endregion
+
+    //region Filter Description
 
     public static String getDescriptionForFilterType(FilterType filterType) {
         switch (filterType) {
             case CONTACTS:
                 return "Contacts Data";
-            case PHONEINFO:
-                return "Phone Information";
+            case IMEI:
+                return "IMEI";
+            case PHONENUMBER:
+                return "Phone Number";
+            case IMSI:
+                return "Device Id";
+            case CARRIERNAME:
+                return "Carrier Name";
             case LOCATION:
                 return "Location Information";
             default:
                 return "Undefined";
         }
     }
+
+    //endregion
 
     public static String messageForMatchedFilters(Set<FilterType> exfiltrated) {
         StringBuilder message = new StringBuilder();
@@ -129,7 +240,6 @@ public class RequestFilterUtil {
         }
         return message.toString();
     }
-
 
     @Deprecated
     public static String[] genDummyForArray(String[] arr) {

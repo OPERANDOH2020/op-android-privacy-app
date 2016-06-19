@@ -71,7 +71,7 @@ public class Settings {
     }
 
     public ThemeStyle getThemeStyle() {
-        return ThemeStyle.find(repository.getStringAsInteger(R.string.theme_key, ThemeStyle.DARK.ordinal()));
+        return ThemeStyle.find(repository.getStringAsInteger(R.string.theme_key, ThemeStyle.LIGHT.ordinal()));
     }
 
     public void toggleWiFiBand() {

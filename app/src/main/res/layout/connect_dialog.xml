@@ -10,12 +10,15 @@
         android:hint="Enter KEY"
         android:ems="10"
         android:padding="@dimen/abc_control_padding_material"
-        android:id="@+id/et_connect_pwd" />
+        android:id="@+id/et_connect_pwd"
+        android:textColor="#000000" />
     <CheckBox
         android:id="@+id/cb_check_pwd"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="Show password"
         android:checked="false"
-        android:padding="@dimen/abc_control_padding_material" />
+        android:padding="@dimen/abc_control_padding_material"
+        android:buttonTint="#000000"
+        android:textColor="#000000" />
 </LinearLayout>

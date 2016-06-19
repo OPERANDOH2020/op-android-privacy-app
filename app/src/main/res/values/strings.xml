@@ -85,6 +85,14 @@
 
     <string name="about_contributor_title">Contributors:</string>
     <string name="about_contributor_list" translatable="false">Nikos Lykousas, Constantinos Patsakis</string>
+    <string name="title_activity_domain_manager">DomainManagerActivity</string>
+    <string name="title_activity_permission_manager">PermissionManager</string>
+    <string name="title_activity_permissions_per_domain">PermissionsPerDomainActivity</string>
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="title_activity_trusted_access_points">TrustedAccessPointsActivity</string>
+    <string name="title_activity_domain_data_log">DomainDataLogActivity</string>
     <!-- about end -->
 
 

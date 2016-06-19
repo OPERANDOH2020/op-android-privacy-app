@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -19,7 +18,6 @@
         android:paddingRight="@dimen/activity_horizontal_margin"
         android:paddingTop="@dimen/activity_vertical_margin">
 
-
         <ImageView
             android:id="@+id/imageView1"
             android:layout_width="wrap_content"
@@ -27,59 +25,6 @@
             android:src="@drawable/logo_bevel"
             android:layout_alignParentTop="true"
             android:layout_alignParentStart="true" />
-        <!-- android:background="#797878" -->
-
-        <ScrollView
-            android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:layout_below="@+id/webView"
-            android:id="@+id/scrollView">
-
-            <LinearLayout
-                android:layout_width="fill_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical" >
-
-                <Button
-                    android:id="@+id/WiFiAPButton"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="WiFi Access Points" />
-
-                <!--<Button-->
-                    <!--android:id="@+id/button2"-->
-                    <!--android:layout_width="fill_parent"-->
-                    <!--android:layout_height="wrap_content"-->
-                    <!--android:layout_marginTop="10dp"-->
-                    <!--android:text="SETTINGS" />-->
-
-                <Button
-                    android:id="@+id/responseFiltersButton"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Response Filters" />
-
-                <Button
-                    android:id="@+id/domainFiltersButton"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="Domain Filters" />
-
-                <!--<Button-->
-                    <!--android:id="@+id/debugLogButton"-->
-                    <!--android:layout_width="fill_parent"-->
-                    <!--android:layout_height="wrap_content"-->
-                    <!--android:layout_marginTop="10dp"-->
-                    <!--android:text="Debug @ Logcat" />-->
-
-
-
-
-            </LinearLayout>
-        </ScrollView>
 
         <android.support.design.widget.FloatingActionButton
             android:id="@+id/fab"
@@ -88,17 +33,199 @@
             android:layout_gravity="bottom|end"
             android:src="@android:drawable/ic_media_play"
             android:layout_alignParentBottom="true"
-            android:layout_alignParentRight="true"/>
+            android:layout_alignParentEnd="true" />
 
         <WebView
             android:layout_width="wrap_content"
             android:layout_height="72dp"
             android:id="@+id/webView"
             android:layout_alignParentTop="true"
-            android:layout_alignParentEnd="true"
-            android:layout_toEndOf="@+id/imageView1"
-             />
+            android:layout_toEndOf="@+id/imageView1" />
 
+        <TabHost
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:id="@+id/tabHost2"
+            android:layout_below="@+id/imageView1">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <TabWidget
+                    android:id="@android:id/tabs"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"></TabWidget>
+
+                <FrameLayout
+                    android:id="@android:id/tabcontent"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <ScrollView
+                        android:layout_width="fill_parent"
+                        android:layout_height="fill_parent"
+                        android:layout_below="@+id/webView"
+                        android:id="@+id/WifiAndAccessPointsScrollView"
+                        android:fillViewport="false">
+
+                        <LinearLayout
+                            android:layout_width="fill_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:weightSum="1">
+
+                            <!--<Button-->
+                                <!--android:id="@+id/button2"-->
+                                <!--android:layout_width="fill_parent"-->
+                                <!--android:layout_height="wrap_content"-->
+                                <!--android:layout_marginTop="10dp"-->
+                                <!--android:text="SETTINGS" />-->
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?android:attr/textAppearanceLarge"
+                                android:text="Wifi &amp; Access Points"
+                                android:id="@+id/textView4"
+                                android:gravity="center_vertical|center_horizontal" />
+
+                            <Button
+                                android:id="@+id/WiFiAPButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="WiFi Access Points"
+                                android:theme="@style/ThemeAppCompatLight" />
+
+                            <Button
+                                android:id="@+id/trustedAccessPointsButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="Trusted Access Points"
+                                android:theme="@style/ThemeAppCompatLight" />
+
+                            <!--<Button-->
+                                <!--android:id="@+id/debugLogButton"-->
+                                <!--android:layout_width="fill_parent"-->
+                                <!--android:layout_height="wrap_content"-->
+                                <!--android:layout_marginTop="10dp"-->
+                                <!--android:text="Debug @ Logcat" />-->
+
+
+
+
+                        </LinearLayout>
+                    </ScrollView>
+
+                    <ScrollView
+                        android:layout_width="fill_parent"
+                        android:layout_height="fill_parent"
+                        android:layout_below="@+id/webView"
+                        android:id="@+id/ResponseAndDomainFiltersScrollView" >
+
+                        <LinearLayout
+                            android:layout_width="fill_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" >
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?android:attr/textAppearanceLarge"
+                                android:text="Response &amp; Domain Filter"
+                                android:id="@+id/textView5"
+                                android:gravity="center_vertical|center_horizontal" />
+
+                            <Button
+                                android:id="@+id/responseFiltersButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="Response Filters" />
+
+                            <Button
+                                android:id="@+id/domainFiltersButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="Domain Filters" />
+
+                            <Button
+                                android:id="@+id/domainManagerButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="Domain Manager" />
+
+                            <Button
+                                android:id="@+id/permissionsPerDomainButton"
+                                android:layout_width="fill_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="10dp"
+                                android:text="Permissions Per Domain" />
+
+                        </LinearLayout>
+                    </ScrollView>
+
+                    <ScrollView
+                        android:layout_width="fill_parent"
+                        android:layout_height="fill_parent"
+                        android:layout_below="@+id/webView"
+                        android:id="@+id/PendingNotificationsScrollView" >
+
+                        <LinearLayout
+                            android:layout_width="fill_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" >
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?android:attr/textAppearanceLarge"
+                                android:text="Pending Notifications"
+                                android:id="@+id/textView6"
+                                android:gravity="center_vertical|center_horizontal" />
+
+                            <TableLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent" />
+
+                        </LinearLayout>
+                    </ScrollView>
+
+                    <ScrollView
+                        android:layout_width="fill_parent"
+                        android:layout_height="fill_parent"
+                        android:layout_below="@+id/webView"
+                        android:id="@+id/LogsScrollView" >
+
+                        <LinearLayout
+                            android:layout_width="fill_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" >
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:textAppearance="?android:attr/textAppearanceLarge"
+                                android:text="Application Data Logs"
+                                android:id="@+id/textView7"
+                                android:gravity="center_vertical|center_horizontal" />
+
+                            <TableLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"></TableLayout>
+
+                        </LinearLayout>
+                    </ScrollView>
+
+                </FrameLayout>
+            </LinearLayout>
+        </TabHost>
 
     </RelativeLayout>
+
 </LinearLayout>
