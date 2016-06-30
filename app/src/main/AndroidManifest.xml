@@ -27,16 +27,19 @@
         android:theme="@style/ThemeAppCompatLight">
         <activity
             android:name=".MainActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         <activity
             android:name=".wifi.AccessPointsActivity"
-            android:configChanges="keyboardHidden|orientation|screenSize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="Access"
             android:parentActivityName=".MainActivity">
             <meta-data
@@ -45,6 +48,8 @@
         </activity>
         <activity
             android:name=".settings.SettingActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/action_settings"
             android:parentActivityName=".MainActivity">
             <meta-data
@@ -53,6 +58,8 @@
         </activity>
         <activity
             android:name=".about.AboutActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/action_about"
             android:parentActivityName=".MainActivity">
             <meta-data
@@ -61,6 +68,8 @@
         </activity>
         <activity
             android:name=".filters.response.ResponseFiltersActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/response_filters"
             android:parentActivityName=".MainActivity">
             <meta-data
@@ -69,6 +78,8 @@
         </activity>
         <activity
             android:name=".filters.domain.DomainFiltersActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/domain_filters"
             android:parentActivityName=".MainActivity">
             <meta-data
@@ -77,16 +88,28 @@
         </activity>
         <activity
             android:name=".filters.domain.DomainManagerActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/title_activity_domain_manager"
-            android:parentActivityName=".MainActivity"/>
+            android:parentActivityName=".MainActivity" />
         <activity
             android:name=".filters.domain.PermissionsPerDomainActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/title_activity_permissions_per_domain"
-            android:parentActivityName=".MainActivity"/>
+            android:parentActivityName=".MainActivity" />
         <activity
             android:name=".wifi.TrustedAccessPointsActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
             android:label="@string/title_activity_trusted_access_points"
-            android:parentActivityName=".MainActivity"/>
+            android:parentActivityName=".MainActivity" />
+        <activity
+            android:name=".service.StatisticsActivity"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale"
+            android:screenOrientation="portrait"
+            android:label="@string/title_activity_statistics"
+            android:parentActivityName="eu.operando.operandoapp.MainActivity" />
 
         <!-- Declaring broadcast receiver for BOOT_COMPLETED event. -->
         <receiver
@@ -127,7 +150,6 @@
         <service
             android:name=".service.ProxyService"
             android:enabled="true" />
-
     </application>
 
 </manifest>

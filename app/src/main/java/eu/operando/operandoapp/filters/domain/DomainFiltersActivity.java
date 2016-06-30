@@ -24,6 +24,7 @@ package eu.operando.operandoapp.filters.domain;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
+import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.NavUtils;
@@ -125,7 +126,6 @@ public class DomainFiltersActivity extends AppCompatActivity {
         }
     }
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         setTheme(MainContext.INSTANCE.getSettings().getThemeStyle().themeAppCompatStyle());
@@ -144,7 +144,7 @@ public class DomainFiltersActivity extends AppCompatActivity {
         //recyclerViewHolder.addView(recyclerView);
 
 
-        //Setup Toolbar
+        //region Setup Toolbar
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
         ActionBar actionBar = getSupportActionBar();
@@ -180,7 +180,6 @@ public class DomainFiltersActivity extends AppCompatActivity {
                     }
                     recyclerViewHolder.addView(recyclerView);
                     inValidateSelections();
-
                 }
 
                 @Override
@@ -189,6 +188,7 @@ public class DomainFiltersActivity extends AppCompatActivity {
             });
 
         }
+        //endregion
     }
 
     @Override
@@ -272,13 +272,17 @@ public class DomainFiltersActivity extends AppCompatActivity {
         } else { //Imported filter list
             final EditText input = new EditText(this);
             input.setSingleLine(true);
-            input.setHint("Enter URL");
+            //input.setHint("Enter URL");
+            input.setText(DatabaseHelper.serverUrl + "/blocked_urls");
             new AlertDialog.Builder(this).setTitle("Import filters from remote file (hosts file format)")
                     .setView(input).setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface dialog, int whichButton) {
 
                     final String importUrl = input.getText().toString();
+                    long start = System.currentTimeMillis();
                     importExternalFilters(importUrl);
+                    long end = System.currentTimeMillis();
+                    Toast.makeText(DomainFiltersActivity.this, (end-start) + "ms required", Toast.LENGTH_LONG).show();
 
                 }
             }).setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
@@ -289,15 +293,13 @@ public class DomainFiltersActivity extends AppCompatActivity {
         }
     }
 
-
     protected void importExternalFilters(final String importUrl) {
-        //String timestap = SimpleDateFormat.getDateTimeInstance().format(new Date().getTime());
         final File tmp = new File(getFilesDir(), "domainfilters_" + System.currentTimeMillis());
         try {
             new DownloadTask(DomainFiltersActivity.this, new URL(importUrl), tmp, new DownloadTask.Listener() {
                 @Override
                 public void onCompleted() {
-                    Toast.makeText(DomainFiltersActivity.this, R.string.msg_downloaded, Toast.LENGTH_LONG).show();
+                    //Toast.makeText(DomainFiltersActivity.this, R.string.msg_downloaded, Toast.LENGTH_LONG).show();
 
                     new AsyncTask<Void, Void, Integer>() {
 
@@ -322,21 +324,18 @@ public class DomainFiltersActivity extends AppCompatActivity {
                                     if (hash >= 0)
                                         line = line.substring(0, hash);
                                     line = line.trim();
-
-                                    if (line.length() > 0) {
-                                        String[] words = line.split("\\s+");
-                                        if (words.length == 2) {
-                                            String blockedDomain = words[1].toLowerCase();
-                                            if (blockedDomain.equals("local") || StringUtils.containsAny(blockedDomain, "localhost", "127.0.0.1", "broadcasthost"))
-                                                continue;
-                                            DomainFilter domainFilter = new DomainFilter();
-                                            domainFilter.setContent(blockedDomain);
-                                            domainFilter.setSource(importUrl);
-                                            domainFilter.setIsWildcard(false);
-                                            db.createDomainFilter(domainFilter);
-                                            count++;
-                                        } else
-                                            Log.i(TAG, "Invalid hosts file line: " + line);
+                                    try{
+                                        String blockedDomain = line;
+                                        if (blockedDomain.equals("local") || StringUtils.containsAny(blockedDomain, "localhost", "127.0.0.1", "broadcasthost"))
+                                            continue;
+                                        DomainFilter domainFilter = new DomainFilter();
+                                        domainFilter.setContent(blockedDomain);
+                                        domainFilter.setSource(importUrl);
+                                        domainFilter.setIsWildcard(false);
+                                        db.createDomainFilter(domainFilter);
+                                        count++;
+                                    } catch (Exception e){
+                                        Log.i(TAG, "Invalid hosts file line: " + line);
                                     }
                                 }
                                 Log.i(TAG, count + " entries read");
@@ -404,11 +403,9 @@ public class DomainFiltersActivity extends AppCompatActivity {
         return true;
     }
 
-
     private class DomainFiltersSpinnerAdapter extends BaseAdapter {
 
         final String[] filterSrcArray = new String[]{"User specified", "External"};
-
 
         @Override
         public int getCount() {
@@ -434,6 +431,7 @@ public class DomainFiltersActivity extends AppCompatActivity {
             title.setText(getResources().getString(R.string.domain_filters));
 
             TextView subtitle = (TextView) view.findViewById(R.id.toolbarSubtitle);
+            subtitle.setTextColor(Color.WHITE);
             subtitle.setText(getItem(position));
             return view;
         }
@@ -450,7 +448,6 @@ public class DomainFiltersActivity extends AppCompatActivity {
             return view;
         }
     }
-
 
     /*
     -----------------------------------------
@@ -595,8 +592,6 @@ public class DomainFiltersActivity extends AppCompatActivity {
             this.isChecked = isChecked;
         }
     }
-
-
 
     /*
     -------------------------------------------
@@ -743,7 +738,6 @@ public class DomainFiltersActivity extends AppCompatActivity {
 
         }
     }
-
 
     public class ExternalDomainFilterCheckStateChangedEvent {
         public boolean isChecked;

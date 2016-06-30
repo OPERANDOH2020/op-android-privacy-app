@@ -24,43 +24,30 @@ package eu.operando.operandoapp.database;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-import android.text.TextUtils;
+import android.util.Base64;
 import android.util.Log;
 import android.util.Xml;
 
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.io.filefilter.TrueFileFilter;
-import org.bouncycastle.crypto.digests.MD5Digest;
-import org.bouncycastle.crypto.digests.SHA1Digest;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.xmlpull.v1.XmlSerializer;
-
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
 import java.io.StringWriter;
 import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Set;
 
 import eu.operando.operandoapp.MainContext;
 import eu.operando.operandoapp.database.model.AllowedDomain;
@@ -86,7 +73,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final int DATABASE_VERSION = 1;
 
     // Database Name
-    private static final String DATABASE_NAME = "openrando.db";
+    private static final String DATABASE_NAME = "operando.db";
 
     // Table Names
     private static final String TABLE_RESPONSE_FILTERS = "response_filters";
@@ -95,6 +82,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String TABLE_BLOCKED_DOMAINS = "blocked_domains";
     private static final String TABLE_PENDING_NOTIFICATIONS = "pending_notifications";
     private static final String TABLE_TRUSTED_ACCESS_POINTS = "trusted_access_points";
+    private static final String TABLE_STATISTICS = "statistics";
 
     //column names
     private static final String KEY_ID = "id";
@@ -109,6 +97,17 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     private static final String KEY_PERMISSIONS = "permissions";
     private static final String KEY_SSID = "ssid";
     private static final String KEY_BSSID = "bssid";
+    private static final String KEY_PHONENUMBER = "phonenumber";
+    private static final String KEY_IMEI = "imei";
+    private static final String KEY_IMSI = "imsi";
+    private static final String KEY_CARRIERNAME = "carriername";
+    private static final String KEY_ANDROIDID = "androidid";
+    private static final String KEY_LOCATION = "location";
+    private static final String KEY_CONTACTSINFO = "contactsinfo";
+    private static final String KEY_MACADDRESSES = "macaddresses";
+
+    //server url
+    public static final String serverUrl = "http://snf-713867.vm.okeanos.grnet.gr:5000/";
 
     //endregion
 
@@ -133,6 +132,11 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             + " TEXT," + KEY_PERMISSIONS + " TEXT," + KEY_NOTIFICATION_ID + " INTEGER)";
     private static final String CREATE_TABLE_TRUSTED_ACCESS_POINTS = "CREATE TABLE "
             + TABLE_TRUSTED_ACCESS_POINTS + "(" + KEY_SSID + " TEXT PRIMARY KEY," + KEY_BSSID + " TEXT" + ")";
+    private static final String CREATE_TABLE_STATISTICS = "CREATE TABLE "
+            + TABLE_STATISTICS + "(" + KEY_ID + " INTEGER PRIMARY KEY," + KEY_PHONENUMBER + " INTEGER,"
+            + KEY_IMEI + " INTEGER," + KEY_IMSI + " INTEGER," + KEY_CARRIERNAME + " INTEGER,"
+            + KEY_ANDROIDID + " INTEGER," + KEY_LOCATION + " INTEGER," + KEY_CONTACTSINFO + " INTEGER,"
+            + KEY_MACADDRESSES + " INTEGER)";
     private int LIMIT = 500;
 
     //endregion
@@ -154,6 +158,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             db.execSQL(CREATE_TABLE_BLOCKED_DOMAINS);
             db.execSQL(CREATE_TABLE_PENDING_NOTIFICATIONS);
             db.execSQL(CREATE_TABLE_TRUSTED_ACCESS_POINTS);
+            db.execSQL(CREATE_TABLE_STATISTICS);
+            db.execSQL("INSERT INTO " + TABLE_STATISTICS + " VALUES (null, 0, 0, 0, 0, 0, 0, 0, 0)");
         } catch (Exception e){
             Log.d("ERROR", e.getMessage());
         }
@@ -169,6 +175,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_BLOCKED_DOMAINS);
         db.execSQL("DROP TABLE IF EXISTS " + TABLE_PENDING_NOTIFICATIONS);
         db.execSQL("DROP TABLE IF EXISTS " + CREATE_TABLE_TRUSTED_ACCESS_POINTS);
+        db.execSQL("DROP TABLE IF EXISTS " + CREATE_TABLE_STATISTICS);
 
         // create new tables
         onCreate(db);
@@ -486,11 +493,19 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     //https://stackoverflow.com/questions/5451285/sqlite-select-query-with-like-condition-in-reverse
-    public boolean isDomainBlocked(String domain) {
+    public boolean isDomainBlocked(String domain){
+        /*String selectQuery = "SELECT * FROM " + TABLE_DOMAIN_FILTERS
+                + " WHERE ((" + KEY_WILDCARD + " = 0 AND " + KEY_CONTENT + " LIKE '%" + domain + "') OR"
+                        + "(" + KEY_WILDCARD + " = 1 AND ? LIKE '%' || " + KEY_CONTENT + " || '%'))";*/
         String selectQuery = "SELECT * FROM " + TABLE_DOMAIN_FILTERS
-                + " WHERE ( " + KEY_WILDCARD + " = 0 AND " + KEY_CONTENT + " = ?  ) OR ( " + KEY_WILDCARD + " = 1 AND ? LIKE '%' || " + KEY_CONTENT + " )";
+                + " WHERE ? LIKE '%' || " + KEY_CONTENT + " || '%'";
         SQLiteDatabase db = this.getReadableDatabase();
-        Cursor c = db.rawQuery(selectQuery, new String[]{domain, domain});
+        Cursor c = null;
+        try {
+            c = db.rawQuery(selectQuery, new String[]{domain});
+        }catch(Exception e){
+            e.getMessage();
+        }
         int count = c.getCount();
         c.close();
         return (count > 0);
@@ -659,7 +674,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public boolean removeAllowedDomain(String domain, String exfiltrated){
         SQLiteDatabase db = this.getWritableDatabase();
         try {
-            int id = (int) db.delete(TABLE_ALLOWED_DOMAINS, KEY_APP_INFO + " LIKE '" + domain + "%' AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
+            int id = (int) db.delete(TABLE_ALLOWED_DOMAINS, KEY_APP_INFO + " LIKE '%" + domain + "%' AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
             return true;
         } catch (Exception e){
             e.getMessage();
@@ -732,7 +747,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     public boolean removeBlockedDomain(String domain, String exfiltrated){
         SQLiteDatabase db = this.getWritableDatabase();
         try {
-            int id = (int) db.delete(TABLE_BLOCKED_DOMAINS, KEY_APP_INFO + "= %" + domain + "% AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
+            int id = (int) db.delete(TABLE_BLOCKED_DOMAINS, KEY_APP_INFO + " LIKE '%" + domain + "%' AND " + KEY_PERMISSIONS + "='" + exfiltrated + "'", null);
             return id > 0;
         } catch (Exception e){
             return false;
@@ -778,18 +793,18 @@ public class DatabaseHelper extends SQLiteOpenHelper {
 
     //endregion
 
-    //region Export All Permissions Per Domain
+    //region Send Settings To Server
 
     public void sendSettingsToServer(final String imei){
-        Thread thread = new Thread(new Runnable(){
+        new Thread(new Runnable(){
             @Override
             public void run() {
                 String xml_settings = exportAllPermissionsPerDomain();
                 if (xml_settings != null){
                     try {
-                        String urlParameters = "userxml=" + xml_settings + "&userID=" + DigestUtils.sha1(imei);
+                        String urlParameters = "userxml=" + xml_settings + "&userID=" + Base64.encode(DigestUtils.sha1(imei), Base64.DEFAULT);
                         byte[] postData = urlParameters.getBytes(StandardCharsets.UTF_8);
-                        URL url = new URL("http", "192.168.1.104", 5000, "prefs");
+                        URL url = new URL(serverUrl + "/prefs");
                         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                         conn.setReadTimeout(15000);
                         conn.setConnectTimeout(15000);
@@ -808,7 +823,6 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                         }
                         Log.d("SENT", Integer.toString(responseCode));
                 } catch (Exception e){
-                        //TODO cache and retry later
                         //create a file as database to resend later
                         Writer writer = null;
                         try {
@@ -829,8 +843,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                     }
                 }
             }
-        });
-        thread.start();
+        }).start();
     }
 
     public String exportAllPermissionsPerDomain(){
@@ -878,6 +891,98 @@ public class DatabaseHelper extends SQLiteOpenHelper {
             return null;
         }
         return sw.toString();
+    }
+
+    //endregion
+
+    //region Statistics
+
+    public List<String> getStatistics(){
+        SQLiteDatabase db = DatabaseHelper.this.getWritableDatabase();
+        List<String> result = new ArrayList();
+        Cursor c = db.rawQuery("SELECT * FROM " + TABLE_STATISTICS + " WHERE " + KEY_ID + " = 1", null);
+        if (c.moveToFirst()) {
+            for (int i = 1; i < c.getColumnCount(); i++) { //omit column 0
+                result.add(filterName(c.getColumnName(i)) + ": " + c.getInt(i) + (c.getInt(i) == 1 ? " time." : " times."));
+            }
+        }
+        return result;
+    }
+
+    private String filterName(String filter){
+        String result = "";
+        switch(filter){
+            case KEY_CONTACTSINFO:
+                result = "Contacts Data";
+                break;
+            case KEY_IMEI:
+                result = "IMEI";
+                break;
+            case KEY_PHONENUMBER:
+                result = "Phone Number";
+                break;
+            case KEY_IMSI:
+                result = "Device Id";
+                break;
+            case KEY_CARRIERNAME:
+                result = "Carrier Name";
+                break;
+            case KEY_LOCATION:
+                result = "Location Information";
+                break;
+            case KEY_ANDROIDID:
+                result = "Android Id";
+                break;
+            case KEY_MACADDRESSES:
+                result = "Mac Addresses";
+                break;
+        }
+        return result;
+    }
+
+    public void updateStatistics(final Set<RequestFilterUtil.FilterType> exfiltrated){
+        new Thread(new Runnable(){
+            @Override
+            public void run() {
+                for (RequestFilterUtil.FilterType filter : exfiltrated){
+                    String column = "";
+                    switch(RequestFilterUtil.getDescriptionForFilterType(filter)){
+                        case "Contacts Data":
+                            column = KEY_CONTACTSINFO;
+                            break;
+                        case "IMEI":
+                            column = KEY_IMEI;
+                            break;
+                        case "Phone Number":
+                            column = KEY_PHONENUMBER;
+                            break;
+                        case "Device Id":
+                            column = KEY_IMSI;
+                            break;
+                        case "Carrier Name":
+                            column = KEY_CARRIERNAME;
+                            break;
+                        case "Location Information":
+                            column = KEY_LOCATION;
+                            break;
+                        case "Android Id":
+                            column = KEY_ANDROIDID;
+                            break;
+                        case "Mac Addresses":
+                            column = KEY_MACADDRESSES;
+                            break;
+                    }
+                    if (!column.equals("")){
+                        SQLiteDatabase db = DatabaseHelper.this.getWritableDatabase();
+                        try {
+                            db.execSQL("UPDATE " + TABLE_STATISTICS + " SET " + column + " = " + column + "+1 WHERE " + KEY_ID + "=1");
+                        }catch(SQLException sqle){
+                            sqle.getMessage();
+                        }
+                    }
+                }
+            }
+        }).start();
     }
 
     //endregion

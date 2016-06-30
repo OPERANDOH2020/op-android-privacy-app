@@ -24,6 +24,7 @@ package eu.operando.operandoapp.filters.response;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
+import android.graphics.Color;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.support.v4.app.NavUtils;
@@ -422,6 +423,7 @@ public class ResponseFiltersActivity extends AppCompatActivity {
             title.setText(getResources().getString(R.string.response_filters));
 
             TextView subtitle = (TextView) view.findViewById(R.id.toolbarSubtitle);
+            subtitle.setTextColor(Color.WHITE);
             subtitle.setText(getItem(position));
             return view;
         }

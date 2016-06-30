@@ -224,6 +224,9 @@ public class ProxyService extends Service {
                             return getUntrustedGatewayResponse();
                         }
 
+                        //check for blocked url
+
+
                         //check for exfiltration
                         requestFilterUtil = new RequestFilterUtil(getApplicationContext());
                         locationInfo = requestFilterUtil.getLocationInfo();
@@ -245,7 +248,7 @@ public class ProxyService extends Service {
                                 request.headers().remove(HttpHeaderNames.ACCEPT_ENCODING);
                             }
                             if (!ProxyUtils.isCONNECT(request) && request.headers().contains(HttpHeaderNames.HOST)) {
-                                String hostName = request.headers().get(HttpHeaderNames.HOST).toLowerCase();
+                                String hostName = ((HttpRequest)request).uri(); //request.headers().get(HttpHeaderNames.HOST).toLowerCase();
                                 if (db.isDomainBlocked(hostName))
                                     return getBlockedHostResponse(hostName);
                             }
@@ -304,8 +307,20 @@ public class ProxyService extends Service {
                             if (content != null) {
                                 ByteBuf buf = (ByteBuf) content.invoke(httpObject);
                                 String contentStr = buf.toString(Charset.forName("UTF-8"));
-                                if (StringUtils.containsAny(contentStr, locationInfo)) {
-                                    exfiltrated.add(RequestFilterUtil.FilterType.LOCATION);
+                                if (locationInfo.length > 0) {
+                                    //tolerate location miscalculation
+                                    float latitude = Float.parseFloat(locationInfo[0]);
+                                    float longitude = Float.parseFloat(locationInfo[1]);
+                                    Matcher m = Pattern.compile("\\d+\\.\\d+").matcher(contentStr);
+                                    List<String> floats_in_uri = new ArrayList();
+                                    while (m.find()) {
+                                        floats_in_uri.add(m.group());
+                                    }
+                                    for (String s : floats_in_uri) {
+                                        if (Math.abs(Float.parseFloat(s) - latitude) < 0.5 || Math.abs(Float.parseFloat(s) - longitude) < 0.1) {
+                                            exfiltrated.add(RequestFilterUtil.FilterType.LOCATION);
+                                        }
+                                    }
                                 }
                                 if (StringUtils.containsAny(contentStr, contactsInfo)) {
                                     exfiltrated.add(RequestFilterUtil.FilterType.CONTACTS);
@@ -375,6 +390,8 @@ public class ProxyService extends Service {
                             int notificationId = mainContext.getNotificationId();
                             mainContext.getNotificationUtil().displayExfiltratedNotification(getBaseContext(), applicationInfo, exfiltrated, notificationId);
                             mainContext.setNotificationId(notificationId + 3);
+                            //and update statistics
+                            db.updateStatistics(exfiltrated);
                             return getAwaitingResponse();
                         }
                         return null;

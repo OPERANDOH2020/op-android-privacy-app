@@ -223,6 +223,10 @@ public class RequestFilterUtil {
                 return "Carrier Name";
             case LOCATION:
                 return "Location Information";
+            case ANDROIDID:
+                return "Android Id";
+            case MACADRESSES:
+                return "Mac Addresses";
             default:
                 return "Undefined";
         }

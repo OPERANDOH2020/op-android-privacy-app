@@ -50,7 +50,8 @@ public class FilterFile {
     }
 
     public String getTitle() {
-        return FilenameUtils.getBaseName(source) + " (" + filterCount + " entries)";
+        //return FilenameUtils.getBaseName(source) + " (" + filterCount + " entries)";
+        return source + " (" + filterCount + " entries)";
     }
 
     @Override

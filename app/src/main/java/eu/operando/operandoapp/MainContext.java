@@ -15,7 +15,7 @@
  * along with OperandoApp.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Contributors:
- *       Nikos Lykousas {UPRC}, Periklis Maravelias, Constantinos Patsakis {UPRC}
+ *       Nikos Lykousas {UPRC}, Constantinos Patsakis {UPRC}
  * Initially developed in the context of OPERANDO EU project www.operando.eu
  */
 

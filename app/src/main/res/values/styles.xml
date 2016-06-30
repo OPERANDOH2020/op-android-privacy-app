@@ -41,6 +41,9 @@
         <item name="android:overlapAnchor">true</item>
     </style>
 
+    <style name="ThemeAppCompatLight.AppBarOverlay" parent="ThemeOverlay.AppCompat.Dark.ActionBar" />
+
+    <style name="ThemeAppCompatLight.PopupOverlay" parent="ThemeOverlay.AppCompat.Light" />
 
 
 </resources>
